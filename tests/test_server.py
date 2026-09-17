@@ -7,6 +7,15 @@ from server import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True, scope="module")
+def ensure_sample_data():
+    """Ensure sample audio and images exist before server tests run."""
+    from scripts.create_sample_project import create_sample
+    audio_path = Path("sample_data/audio.wav")
+    if not audio_path.exists():
+        create_sample(Path("sample_data"))
+
+
 def test_dashboard_page():
     resp = client.get("/")
     assert resp.status_code == 200
