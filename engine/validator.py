@@ -25,25 +25,74 @@ def extract_numeric_index(filename: str) -> Optional[int]:
     return None
 
 
+def parse_raw_prompt_blocks(content: str) -> List[str]:
+    """Parse raw prompts separated by blank-line divisions.
+    
+    A blank-line division means one or more empty lines between prompt blocks.
+    Preserves exact prompt text (stripping only outer whitespace of each block).
+    Returns list of prompts in immutable order.
+    """
+    if not content:
+        return []
+    normalized = content.replace("\r\n", "\n")
+    blocks = re.split(r"\n\s*\n+", normalized)
+    prompts = []
+    for b in blocks:
+        clean = b.strip()
+        if clean:
+            prompts.append(clean)
+    return prompts
+
+
+def parse_voiceover_paragraphs(content: Union[Path, str]) -> List[str]:
+    """Parse voiceover text into paragraphs by blank-line divisions.
+    
+    Preserves exact paragraph order and text (stripping only outer whitespace).
+    """
+    if isinstance(content, Path) or (isinstance(content, str) and len(content) < 500 and "\n" not in content and Path(content).exists()):
+        text = Path(content).read_text(encoding="utf-8")
+    else:
+        text = str(content)
+
+    if not text:
+        return []
+    normalized = text.replace("\r\n", "\n")
+    blocks = re.split(r"\n\s*\n+", normalized)
+    paragraphs = []
+    for b in blocks:
+        clean = b.strip()
+        if clean:
+            paragraphs.append(clean)
+    return paragraphs
+
+
 def parse_prompts_file(prompts_path: Path) -> Dict[int, str]:
-    """Parse prompts file supporting multiple formats:
-    - List of objects: [{"index": 1, "prompt": "..."}, ...]
-    - Dict mapping index to prompt: {"1": "prompt...", "2": "prompt..."}
+    """Parse prompts file supporting:
+    - Raw plain text (.txt): prompts separated by blank lines (Image 1 -> Prompt 1, etc.)
+    - JSON list of objects: [{"index": 1, "prompt": "..."}, ...]
+    - JSON dict mapping index: {"1": "prompt...", "2": "prompt..."}
     - JSONL: each line a JSON object
     """
     prompts_path = Path(prompts_path)
     if not prompts_path.exists():
         raise FileNotFoundError(f"Prompts file not found: {prompts_path}")
 
-    content = prompts_path.read_text(encoding="utf-8").strip()
-    if not content:
+    content = prompts_path.read_text(encoding="utf-8")
+    if not content.strip():
         return {}
 
     prompts_map: Dict[int, str] = {}
 
-    # Try JSON first
+    # If file is explicitly .txt, parse directly as raw prompt blocks
+    if prompts_path.suffix.lower() == ".txt":
+        blocks = parse_raw_prompt_blocks(content)
+        for i, block in enumerate(blocks, start=1):
+            prompts_map[i] = block
+        return prompts_map
+
+    # Try JSON first for .json / other extensions
     try:
-        data = json.loads(content)
+        data = json.loads(content.strip())
         if isinstance(data, dict):
             for k, v in data.items():
                 try:
@@ -53,9 +102,9 @@ def parse_prompts_file(prompts_path: Path) -> Dict[int, str]:
                     elif isinstance(v, dict) and "prompt" in v:
                         prompts_map[idx] = str(v["prompt"])
                 except ValueError:
-                    # Key is not an integer index
                     continue
-            return prompts_map
+            if prompts_map:
+                return prompts_map
         elif isinstance(data, list):
             for item in data:
                 if isinstance(item, dict):
@@ -67,12 +116,13 @@ def parse_prompts_file(prompts_path: Path) -> Dict[int, str]:
                         file_idx = extract_numeric_index(item["filename"])
                         if file_idx is not None:
                             prompts_map[file_idx] = str(prompt_text)
-            return prompts_map
+            if prompts_map:
+                return prompts_map
     except json.JSONDecodeError:
         pass
 
     # Try JSON Lines
-    lines = content.splitlines()
+    lines = content.strip().splitlines()
     for line in lines:
         line = line.strip()
         if not line:
@@ -91,6 +141,13 @@ def parse_prompts_file(prompts_path: Path) -> Dict[int, str]:
         except json.JSONDecodeError:
             continue
 
+    if prompts_map:
+        return prompts_map
+
+    # Fallback to raw blank-line divisions
+    blocks = parse_raw_prompt_blocks(content)
+    for i, block in enumerate(blocks, start=1):
+        prompts_map[i] = block
     return prompts_map
 
 
@@ -186,6 +243,10 @@ class InputValidator:
                     sequence_gaps.append(expected_i)
 
         errors: List[str] = []
+        if total_images != total_prompts:
+            errors.append(
+                f"Prompt count mismatch: {total_images} images found, but {total_prompts} prompts provided in {prompts_path.name}. Exactly 1 prompt per image is required."
+            )
         if invalid_filenames:
             errors.append(f"{len(invalid_filenames)} image filenames lack a numeric prefix.")
         if duplicate_image_indexes:
@@ -201,6 +262,7 @@ class InputValidator:
 
         is_valid = (
             len(errors) == 0 and
+            total_images == total_prompts and
             len(invalid_filenames) == 0 and
             len(duplicate_image_indexes) == 0 and
             len(missing_images) == 0 and

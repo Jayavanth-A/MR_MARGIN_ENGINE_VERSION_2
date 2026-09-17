@@ -13,7 +13,7 @@ from engine.models import InputValidationReport, Timeline, TimelineEntry, Verifi
 from engine.reconciler import TimelineReconciler
 from engine.renderer import VideoRenderer
 from engine.timestamp_normalizer import TimestampNormalizer
-from engine.validator import InputValidator, TimelineValidator
+from engine.validator import InputValidator, TimelineValidator, parse_voiceover_paragraphs
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,18 @@ class VideoAutomationPipeline:
         self._safe_print(f"[bold green]✓ {report.total_prompts}/{report.total_images} prompts matched[/bold green]")
         log_event(f"Prompts matched: {report.total_prompts}/{report.total_images}")
 
+        # Generate and save prompt_manifest.json (audit manifest)
+        prompt_manifest = {
+            str(img.index): {
+                "image": img.filename,
+                "prompt": img.prompt,
+            }
+            for img in locked_sequence
+        }
+        manifest_path = out_dir / "prompt_manifest.json"
+        manifest_path.write_text(json.dumps(prompt_manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+        log_event(f"Saved prompt manifest ({len(prompt_manifest)} entries) to {manifest_path.name}")
+
         # -------------------------------------------------------------
         # [4/12] Validate voiceover text
         # -------------------------------------------------------------
@@ -134,8 +146,13 @@ class VideoAutomationPipeline:
         voiceover_text = vo_path.read_text(encoding="utf-8")
         if not voiceover_text.strip():
             raise ValueError("Voiceover text file is empty.")
-        self._safe_print("[bold green]✓ Text loaded and validated[/bold green]")
-        log_event(f"Voiceover text loaded ({len(voiceover_text)} chars)")
+
+        # Parse and save voiceover_paragraphs.json (audit manifest)
+        paragraphs = parse_voiceover_paragraphs(voiceover_text)
+        paragraphs_path = out_dir / "voiceover_paragraphs.json"
+        paragraphs_path.write_text(json.dumps(paragraphs, indent=2, ensure_ascii=False), encoding="utf-8")
+        self._safe_print(f"[bold green]✓ Text loaded and validated ({len(paragraphs)} paragraphs)[/bold green]")
+        log_event(f"Voiceover text loaded ({len(paragraphs)} paragraphs, {len(voiceover_text)} chars)")
 
         # -------------------------------------------------------------
         # [5/12] Probe voiceover audio duration with FFprobe

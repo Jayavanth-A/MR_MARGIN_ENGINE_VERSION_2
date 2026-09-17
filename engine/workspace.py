@@ -5,11 +5,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from engine.audio import format_timestamp, get_audio_duration
-from engine.validator import extract_numeric_index, parse_prompts_file
+from engine.validator import (
+    extract_numeric_index,
+    parse_prompts_file,
+    parse_voiceover_paragraphs,
+)
 
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-ALLOWED_PROMPT_EXTENSIONS = {".json", ".jsonl"}
+ALLOWED_PROMPT_EXTENSIONS = {".txt", ".json", ".jsonl"}
 ALLOWED_VOICEOVER_EXTENSIONS = {".txt"}
 ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"}
 
@@ -121,7 +125,7 @@ class WorkspaceManager:
     def save_prompts(self, project_id: str, filename: str, content: bytes) -> Path:
         """Save prompts file into project root."""
         ext = Path(filename).suffix.lower()
-        target_name = f"prompts{ext}" if ext in ALLOWED_PROMPT_EXTENSIONS else "prompts.json"
+        target_name = f"prompts{ext}" if ext in ALLOWED_PROMPT_EXTENSIONS else "prompts.txt"
         return self.save_file(
             project_id=project_id,
             filename=filename,
@@ -246,10 +250,12 @@ class WorkspaceManager:
         proj_dir = self.get_project_dir(project_id)
         candidates = list(proj_dir.glob("prompts.*"))
         if not candidates:
-            # Check any json/jsonl in root
+            # Check any json/jsonl/txt in root (excluding voiceover and timestamp files)
             candidates = [
                 f for f in proj_dir.iterdir()
-                if f.is_file() and f.suffix.lower() in ALLOWED_PROMPT_EXTENSIONS
+                if f.is_file()
+                and f.suffix.lower() in ALLOWED_PROMPT_EXTENSIONS
+                and f.name not in ("voiceover.txt", "timestamps.txt", "source_timestamp_text.txt")
             ]
 
         if not candidates:
@@ -258,11 +264,22 @@ class WorkspaceManager:
         p_file = candidates[0]
         try:
             prompts_map = parse_prompts_file(p_file)
+            sorted_keys = sorted(list(prompts_map.keys()))
+            preview_items = [
+                {"index": k, "prompt": prompts_map[k][:100] + ("..." if len(prompts_map[k]) > 100 else "")}
+                for k in sorted_keys[:5]
+            ]
+            mapping_preview = [
+                f"Image {k} → Prompt {k}"
+                for k in sorted_keys[:5]
+            ]
             return {
                 "exists": True,
                 "filename": p_file.name,
                 "count": len(prompts_map),
-                "indices": sorted(list(prompts_map.keys())),
+                "indices": sorted_keys,
+                "preview_items": preview_items,
+                "mapping_preview": mapping_preview,
                 "is_valid": len(prompts_map) > 0,
             }
         except Exception as e:
@@ -283,7 +300,7 @@ class WorkspaceManager:
                 f for f in proj_dir.iterdir()
                 if f.is_file()
                 and f.suffix.lower() == ".txt"
-                and f.name not in ("timestamps.txt", "source_timestamp_text.txt")
+                and f.name not in ("timestamps.txt", "source_timestamp_text.txt", "prompts.txt")
             ]
             if candidates:
                 vo_path = candidates[0]
@@ -293,12 +310,19 @@ class WorkspaceManager:
         try:
             text = vo_path.read_text(encoding="utf-8")
             clean_text = text.strip()
+            paragraphs = parse_voiceover_paragraphs(text)
+            para_preview = [
+                p[:120] + ("..." if len(p) > 120 else "")
+                for p in paragraphs[:3]
+            ]
             return {
                 "exists": True,
                 "filename": vo_path.name,
                 "char_count": len(clean_text),
                 "word_count": len(clean_text.split()),
                 "line_count": len(text.splitlines()),
+                "paragraph_count": len(paragraphs),
+                "paragraphs_preview": para_preview,
                 "is_empty": len(clean_text) == 0,
                 "preview": clean_text[:200] + ("..." if len(clean_text) > 200 else ""),
             }
@@ -364,10 +388,10 @@ class WorkspaceManager:
         elif not prompt_meta.get("is_valid", False):
             errors.append(f"Invalid prompts file: {prompt_meta.get('error', 'empty or unparseable')}")
         elif img_meta["count"] > 0 and prompt_meta["count"] != img_meta["count"]:
-            warnings.append(
-                f"Prompt count ({prompt_meta['count']}) differs from image count ({img_meta['count']})."
+            errors.append(
+                f"Prompt count mismatch: {img_meta['count']} images found, but {prompt_meta['count']} prompts provided in {prompt_meta.get('filename', 'prompts file')}. Exactly 1 prompt per image is required."
             )
-            prompts_ok = True
+            prompts_ok = False
         else:
             prompts_ok = True
 
@@ -407,12 +431,21 @@ class WorkspaceManager:
                     "status": "ok" if prompts_ok else "error",
                     "count": prompt_meta.get("count", 0),
                     "filename": prompt_meta.get("filename"),
+                    "mapping_status": (
+                        f"{img_meta['count']} ↔ {prompt_meta.get('count', 0)}"
+                        if img_meta['count'] == prompt_meta.get('count', 0) and img_meta['count'] > 0
+                        else f"{img_meta['count']} images vs {prompt_meta.get('count', 0)} prompts"
+                    ),
+                    "preview_items": prompt_meta.get("preview_items", []),
+                    "mapping_preview": prompt_meta.get("mapping_preview", []),
                     "details": prompt_meta,
                 },
                 "voiceover": {
                     "status": "ok" if vo_ok else "error",
+                    "paragraphs": vo_meta.get("paragraph_count", 0),
                     "words": vo_meta.get("word_count", 0),
                     "chars": vo_meta.get("char_count", 0),
+                    "paragraphs_preview": vo_meta.get("paragraphs_preview", []),
                     "details": vo_meta,
                 },
                 "audio": {

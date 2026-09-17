@@ -323,6 +323,62 @@
             font-family: 'JetBrains Mono', monospace;
         }
 
+        /* PREVIEW SHELVES (PROMPTS & VOICEOVER) */
+        .preview-shelf {
+            margin-top: -4px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            background: #0d1420;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 12px;
+        }
+
+        .preview-meta-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11.5px;
+            color: var(--text-secondary);
+        }
+
+        .preview-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 130px;
+            overflow-y: auto;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            padding-right: 4px;
+        }
+
+        .preview-item {
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 2px solid var(--accent-cyan);
+            padding: 5px 8px;
+            border-radius: 3px;
+            color: var(--text-primary);
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .preview-item.vo {
+            border-left-color: var(--accent-purple);
+        }
+
+        .preview-badge {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-right: 6px;
+        }
+
+        .preview-item.vo .preview-badge {
+            color: var(--accent-purple);
+        }
+
         /* READINESS CARD */
         .readiness-banner {
             background: #0d1420;
@@ -828,18 +884,27 @@
 
                     <!-- 2. PROMPTS FILE -->
                     <div class="upload-card" id="cardPrompts" onclick="document.getElementById('inputPrompts').click()">
-                        <input type="file" id="inputPrompts" class="hidden-file-input" accept=".json,.jsonl">
+                        <input type="file" id="inputPrompts" class="hidden-file-input" accept=".txt,.json,.jsonl">
                         <div class="upload-info">
                             <div class="upload-icon">📜</div>
                             <div class="upload-texts">
                                 <div class="upload-title">
-                                    <span>Prompts File</span>
+                                    <span>Image Prompts (.txt)</span>
                                     <span class="pill-check" id="badgePrompts">Pending</span>
                                 </div>
-                                <div class="upload-desc" id="descPrompts">Select .json or .jsonl prompts matching image sequence</div>
+                                <div class="upload-desc" id="descPrompts">Raw text separated by blank lines; 1:1 mapped to images</div>
                             </div>
                         </div>
                         <button class="upload-btn-mini" type="button">Select File</button>
+                    </div>
+
+                    <!-- PROMPTS PREVIEW SHELF -->
+                    <div class="preview-shelf" id="promptsShelf">
+                        <div class="preview-meta-bar">
+                            <span id="promptsMetaCount">0 prompts loaded</span>
+                            <span id="promptsMetaMap" style="color: #34d399; font-family: 'JetBrains Mono', monospace;">1:1 Mapping Active</span>
+                        </div>
+                        <div class="preview-list" id="promptsPreviewList"></div>
                     </div>
 
                     <!-- 3. VOICEOVER TEXT FILE -->
@@ -849,13 +914,22 @@
                             <div class="upload-icon">📝</div>
                             <div class="upload-texts">
                                 <div class="upload-title">
-                                    <span>Voiceover Text</span>
+                                    <span>Voiceover Text (.txt)</span>
                                     <span class="pill-check" id="badgeVoiceover">Pending</span>
                                 </div>
-                                <div class="upload-desc" id="descVoiceover">Select UTF-8 voiceover script (.txt)</div>
+                                <div class="upload-desc" id="descVoiceover">Plain text script; paragraphs separated by blank lines</div>
                             </div>
                         </div>
                         <button class="upload-btn-mini" type="button">Select File</button>
+                    </div>
+
+                    <!-- VOICEOVER PREVIEW SHELF -->
+                    <div class="preview-shelf" id="voShelf">
+                        <div class="preview-meta-bar">
+                            <span id="voMetaCounts">0 paragraphs | 0 words</span>
+                            <span style="color: var(--accent-purple); font-family: 'JetBrains Mono', monospace;">Voiceover Script</span>
+                        </div>
+                        <div class="preview-list" id="voPreviewList"></div>
                     </div>
 
                     <!-- 4. VOICEOVER AUDIO FILE -->
@@ -882,10 +956,11 @@
                         <span id="readinessText">Awaiting Asset Uploads</span>
                     </div>
                     <div class="readiness-indicators">
-                        <span class="pill-check" id="rImages">IMG</span>
-                        <span class="pill-check" id="rPrompts">PRM</span>
-                        <span class="pill-check" id="rVo">TXT</span>
-                        <span class="pill-check" id="rAudio">AUD</span>
+                        <span class="pill-check" id="rImages" title="Images">IMG</span>
+                        <span class="pill-check" id="rPrompts" title="Prompts">PRM</span>
+                        <span class="pill-check" id="rMapping" title="1:1 Image ↔ Prompt Mapping">MAP</span>
+                        <span class="pill-check" id="rVo" title="Voiceover Paragraphs">VO</span>
+                        <span class="pill-check" id="rAudio" title="Audio">AUD</span>
                     </div>
                 </div>
 
@@ -1023,6 +1098,12 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
                         </a>
                         <a href="/api/file/validation_report.json" class="download-link" id="dlValReport" target="_blank">
                             🔍 validation_report.json
+                        </a>
+                        <a href="/api/file/prompt_manifest.json" class="download-link" id="dlPromptManifest" target="_blank">
+                            📑 prompt_manifest.json
+                        </a>
+                        <a href="/api/file/voiceover_paragraphs.json" class="download-link" id="dlVoParagraphs" target="_blank">
+                            📑 voiceover_paragraphs.json
                         </a>
                     </div>
                 </div>
@@ -1250,6 +1331,66 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
             }
         });
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function renderPromptsShelf(meta) {
+            const shelf = document.getElementById('promptsShelf');
+            const countSpan = document.getElementById('promptsMetaCount');
+            const mapSpan = document.getElementById('promptsMetaMap');
+            const list = document.getElementById('promptsPreviewList');
+
+            shelf.style.display = 'flex';
+            countSpan.textContent = `${meta.count || 0} prompts loaded`;
+            mapSpan.textContent = `Sequence: 1 → ${meta.count || 0}`;
+            list.innerHTML = "";
+
+            const items = meta.preview_items || [];
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = "preview-item";
+                div.innerHTML = `<span class="preview-badge">Image ${item.index} ➔</span> ${escapeHtml(item.prompt)}`;
+                list.appendChild(div);
+            });
+            if ((meta.count || 0) > items.length) {
+                const more = document.createElement('div');
+                more.style.fontSize = '10px';
+                more.style.color = 'var(--text-muted)';
+                more.style.padding = '4px 8px';
+                more.textContent = `+ ${meta.count - items.length} more prompts in immutable sequence`;
+                list.appendChild(more);
+            }
+        }
+
+        function renderVoiceoverShelf(meta) {
+            const shelf = document.getElementById('voShelf');
+            const countsSpan = document.getElementById('voMetaCounts');
+            const list = document.getElementById('voPreviewList');
+
+            shelf.style.display = 'flex';
+            countsSpan.textContent = `${meta.paragraph_count || 0} paragraphs | ${meta.word_count || 0} words`;
+            list.innerHTML = "";
+
+            const paras = meta.paragraphs_preview || [];
+            paras.forEach((para, idx) => {
+                const div = document.createElement('div');
+                div.className = "preview-item vo";
+                div.innerHTML = `<span class="preview-badge">¶ ${idx + 1}</span> ${escapeHtml(para)}`;
+                list.appendChild(div);
+            });
+            if ((meta.paragraph_count || 0) > paras.length) {
+                const more = document.createElement('div');
+                more.style.fontSize = '10px';
+                more.style.color = 'var(--text-muted)';
+                more.style.padding = '4px 8px';
+                more.textContent = `+ ${meta.paragraph_count - paras.length} more paragraphs in exact order`;
+                list.appendChild(more);
+            }
+        }
+
         document.getElementById('inputPrompts').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -1265,8 +1406,9 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
                     const count = data.metadata.count || 0;
                     document.getElementById('badgePrompts').className = "pill-check ok";
                     document.getElementById('badgePrompts').textContent = `✓ ${count} Prompts`;
-                    document.getElementById('descPrompts').textContent = `${file.name} (${count} entries loaded)`;
+                    document.getElementById('descPrompts').textContent = `${file.name} (${count} prompts mapped 1:1)`;
                     document.getElementById('cardPrompts').classList.add('loaded');
+                    renderPromptsShelf(data.metadata);
                     checkReadiness();
                 }
             } catch (err) {
@@ -1286,12 +1428,13 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
                 const res = await fetch(`/api/project/${pid}/upload/voiceover`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.success) {
+                    const paras = data.metadata.paragraph_count || 0;
                     const words = data.metadata.word_count || 0;
-                    const chars = data.metadata.char_count || 0;
                     document.getElementById('badgeVoiceover').className = "pill-check ok";
-                    document.getElementById('badgeVoiceover').textContent = `✓ ${words} words`;
-                    document.getElementById('descVoiceover').textContent = `${file.name} (${words} words, ${chars} chars)`;
+                    document.getElementById('badgeVoiceover').textContent = `✓ ${paras} paragraphs`;
+                    document.getElementById('descVoiceover').textContent = `${file.name} (${paras} paragraphs, ${words} words)`;
                     document.getElementById('cardVoiceover').classList.add('loaded');
+                    renderVoiceoverShelf(data.metadata);
                     checkReadiness();
                 }
             } catch (err) {
@@ -1366,6 +1509,7 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
 
                 const rImages = document.getElementById('rImages');
                 const rPrompts = document.getElementById('rPrompts');
+                const rMapping = document.getElementById('rMapping');
                 const rVo = document.getElementById('rVo');
                 const rAudio = document.getElementById('rAudio');
 
@@ -1374,17 +1518,41 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
                 rVo.className = data.checklist.voiceover.status === 'ok' ? 'pill-check ok' : 'pill-check';
                 rAudio.className = data.checklist.audio.status === 'ok' ? 'pill-check ok' : 'pill-check';
 
+                const imgCount = data.checklist.images.count || 0;
+                const prmCount = data.checklist.prompts.count || 0;
+                if (imgCount > 0 && prmCount > 0 && imgCount === prmCount) {
+                    rMapping.className = 'pill-check ok';
+                    rMapping.textContent = `✓ ${imgCount} ↔ ${prmCount}`;
+                } else if (imgCount > 0 && prmCount > 0 && imgCount !== prmCount) {
+                    rMapping.className = 'pill-check';
+                    rMapping.style.borderColor = '#ef4444';
+                    rMapping.style.color = '#ef4444';
+                    rMapping.textContent = `❌ ${imgCount} ↔ ${prmCount}`;
+                } else {
+                    rMapping.className = 'pill-check';
+                    rMapping.textContent = 'MAP';
+                    rMapping.style.borderColor = '';
+                    rMapping.style.color = '';
+                }
+
                 const rText = document.getElementById('readinessText');
                 const rIcon = document.getElementById('readinessIcon');
 
                 if (data.ready) {
                     rIcon.textContent = "⚡";
-                    rText.textContent = "Project Assets Complete & Validated";
+                    rText.textContent = `Ready: ${imgCount} images ↔ ${prmCount} prompts | ${data.checklist.voiceover.paragraphs || 0} paragraphs`;
                     rText.style.color = "#34d399";
                 } else {
-                    rIcon.textContent = "⏳";
-                    rText.textContent = data.errors.length > 0 ? data.errors[0] : "Missing Required Assets";
-                    rText.style.color = "var(--text-secondary)";
+                    const mismatchErr = (data.errors || []).find(e => e.toLowerCase().includes("mismatch"));
+                    if (mismatchErr) {
+                        rIcon.textContent = "❌";
+                        rText.textContent = mismatchErr;
+                        rText.style.color = "#f87171";
+                    } else {
+                        rIcon.textContent = "⏳";
+                        rText.textContent = data.errors.length > 0 ? data.errors[0] : "Missing Required Assets";
+                        rText.style.color = "var(--text-secondary)";
+                    }
                 }
             } catch (err) {
                 console.error("Readiness check error:", err);
@@ -1407,12 +1575,12 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
 
                 document.getElementById('badgePrompts').className = "pill-check ok";
                 document.getElementById('badgePrompts').textContent = "✓ 5 Prompts";
-                document.getElementById('descPrompts').textContent = "sample_data/prompts.json (5 entries matched)";
+                document.getElementById('descPrompts').textContent = "sample_data/prompts.txt (5 raw prompts matched 1:1)";
                 document.getElementById('cardPrompts').classList.add('loaded');
 
                 document.getElementById('badgeVoiceover').className = "pill-check ok";
-                document.getElementById('badgeVoiceover').textContent = "✓ 60 words";
-                document.getElementById('descVoiceover').textContent = "sample_data/voiceover.txt";
+                document.getElementById('badgeVoiceover').textContent = "✓ 5 paragraphs";
+                document.getElementById('descVoiceover').textContent = "sample_data/voiceover.txt (5 paragraphs, 60 words)";
                 document.getElementById('cardVoiceover').classList.add('loaded');
 
                 document.getElementById('badgeAudio').className = "pill-check ok";
@@ -1422,11 +1590,40 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
 
                 // Readiness indicators
                 ['rImages', 'rPrompts', 'rVo', 'rAudio'].forEach(id => {
-                    document.getElementById(id).className = "pill-check ok";
+                    const el = document.getElementById(id);
+                    if (el) el.className = "pill-check ok";
                 });
+                const rMapping = document.getElementById('rMapping');
+                if (rMapping) {
+                    rMapping.className = "pill-check ok";
+                    rMapping.textContent = "✓ 5 ↔ 5";
+                }
                 document.getElementById('readinessIcon').textContent = "⚡";
-                document.getElementById('readinessText').textContent = "Sample Assets Ready (5 images / 12.000s)";
+                document.getElementById('readinessText').textContent = "Sample Assets Ready (5 images ↔ 5 prompts / 12.000s)";
                 document.getElementById('readinessText').style.color = "#34d399";
+
+                // Populate preview shelves
+                renderPromptsShelf({
+                    count: 5,
+                    preview_items: [
+                        {index: 1, prompt: "Cinematic exterior of a busy neighborhood laundromat at sunrise with golden light reflecting on windows."},
+                        {index: 2, prompt: "Wide interior of a modern laundromat filled with stainless steel commercial washers and dryers."},
+                        {index: 3, prompt: "Close-up macro shot of vibrant clothes spinning rapidly behind sudsy glass door."},
+                        {index: 4, prompt: "Warm atmospheric shot of customer folding fresh laundry at clean wooden folding table."},
+                        {index: 5, prompt: "Atmospheric wide shot of laundromat attendant locking glass front door as evening streetlights turn on."}
+                    ]
+                });
+
+                renderVoiceoverShelf({
+                    paragraph_count: 5,
+                    word_count: 60,
+                    char_count: 525,
+                    paragraphs_preview: [
+                        "Every morning, as dawn breaks over the city, the neighborhood laundromat hums to life.",
+                        "Rows of heavy-duty industrial washers begin their continuous, rhythmic spin, washing away the week's fatigue.",
+                        "Inside, the gentle tumble of clothes and the scent of warm lavender detergent create an unexpected sanctuary of calm."
+                    ]
+                });
 
                 // Load standard sample timestamps
                 loadSample('standard');
@@ -1607,6 +1804,8 @@ Image 2 appears from 2.59 to 5.04 seconds..."></textarea>
             document.getElementById('dlFinalTimeline').href = `/api/jobs/${jobId}/file/final_timeline.json`;
             document.getElementById('dlTimingReport').href = `/api/jobs/${jobId}/file/timing_report.json`;
             document.getElementById('dlValReport').href = `/api/jobs/${jobId}/file/validation_report.json`;
+            document.getElementById('dlPromptManifest').href = `/api/jobs/${jobId}/file/prompt_manifest.json`;
+            document.getElementById('dlVoParagraphs').href = `/api/jobs/${jobId}/file/voiceover_paragraphs.json`;
 
             sendBtn.disabled = false;
         }

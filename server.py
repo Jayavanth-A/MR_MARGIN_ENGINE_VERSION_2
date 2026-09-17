@@ -220,7 +220,7 @@ def _execute_pipeline_job(job: JobState, req: RunRequest, loop: asyncio.Abstract
 
         # find prompts
         prompts_candidates = list(proj_dir.glob("prompts.*"))
-        prompts_file = prompts_candidates[0] if prompts_candidates else proj_dir / "prompts.json"
+        prompts_file = prompts_candidates[0] if prompts_candidates else proj_dir / "prompts.txt"
 
         # find voiceover
         vo_file = proj_dir / "voiceover.txt"
