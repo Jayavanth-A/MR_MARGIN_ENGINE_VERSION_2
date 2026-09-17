@@ -26,6 +26,7 @@ build/
 
 # Application Working & Output Directories
 jobs/
+workspace/
 output/
 logs/
 temp/

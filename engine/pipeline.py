@@ -42,6 +42,17 @@ class VideoAutomationPipeline:
         self.normalizer = TimestampNormalizer(config, self.llm_client)
         self.renderer = VideoRenderer(config)
 
+    def _safe_print(self, text: str):
+        """Safely print Rich formatted messages preventing Windows charmap crashes."""
+        try:
+            self.console.print(text)
+        except Exception:
+            try:
+                clean = text.encode("ascii", errors="replace").decode("ascii")
+                self.console.print(clean)
+            except Exception:
+                pass
+
     def _notify(
         self,
         stage: str,
@@ -49,7 +60,7 @@ class VideoAutomationPipeline:
         callback: Optional[Callable[[str, str], None]] = None
     ):
         """Helper to emit logs and notify dashboard UI."""
-        self.console.print(f"[bold cyan]{stage}[/bold cyan] {message}")
+        self._safe_print(f"[bold cyan]{stage}[/bold cyan] {message}")
         if callback:
             try:
                 callback(stage, message)
@@ -82,7 +93,10 @@ class VideoAutomationPipeline:
         # -------------------------------------------------------------
         # [1] Scan images
         # -------------------------------------------------------------
-        self._notify("[1/13]", "Scanning images...", status_callback)
+        # -------------------------------------------------------------
+        # [1/12] Scan images & build locked numeric manifest
+        # -------------------------------------------------------------
+        self._notify("[1/12]", "Scanning images and building locked numeric manifest...", status_callback)
         report, locked_sequence = InputValidator.validate_inputs(images_dir, prompts_file)
 
         # Save validation report
@@ -90,74 +104,77 @@ class VideoAutomationPipeline:
         val_report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
 
         if not report.is_valid or locked_sequence is None:
-            self.console.print(f"[bold red]{report.format_console_report()}[/bold red]")
+            self._safe_print(f"[bold red]{report.format_console_report()}[/bold red]")
             raise ValueError(f"Input validation failed:\n{report.format_console_report()}")
 
-        self.console.print(f"[bold green]✓ {report.total_images} images detected[/bold green]")
+        self._safe_print(f"[bold green]✓ {report.total_images} images detected[/bold green]")
         log_event(f"Images verified: {report.total_images}")
 
         # -------------------------------------------------------------
-        # [2] Extract numeric indexes
+        # [2/12] Validate numeric sequence (1..N)
         # -------------------------------------------------------------
-        self._notify("[2/13]", "Extracting image indexes...", status_callback)
-        self.console.print(f"[bold green]✓ Sequence detected: 1 → {report.total_images}[/bold green]")
+        self._notify("[2/12]", "Validating numeric sequence (1..N)...", status_callback)
+        self._safe_print(f"[bold green]✓ Sequence detected: 1 → {report.total_images}[/bold green]")
         log_event(f"Sequence locked: 1 -> {report.total_images}")
 
         # -------------------------------------------------------------
-        # [3] Validate prompts
+        # [3/12] Validate prompts against images
         # -------------------------------------------------------------
-        self._notify("[3/13]", "Validating prompts...", status_callback)
-        self.console.print(f"[bold green]✓ {report.total_prompts}/{report.total_images} prompts matched[/bold green]")
+        self._notify("[3/12]", "Validating prompts against images...", status_callback)
+        self._safe_print(f"[bold green]✓ {report.total_prompts}/{report.total_images} prompts matched[/bold green]")
         log_event(f"Prompts matched: {report.total_prompts}/{report.total_images}")
 
         # -------------------------------------------------------------
-        # [4] Load voiceover text
+        # [4/12] Validate voiceover text
         # -------------------------------------------------------------
-        self._notify("[4/13]", "Loading voiceover text...", status_callback)
+        self._notify("[4/12]", "Validating voiceover text...", status_callback)
         vo_path = Path(voiceover_text_file)
         if not vo_path.exists():
             raise FileNotFoundError(f"Voiceover text file not found: {vo_path}")
-        voiceover_text = vo_path.read_text(encoding="utf-8").strip()
-        self.console.print("[bold green]✓ Text loaded[/bold green]")
+        voiceover_text = vo_path.read_text(encoding="utf-8")
+        if not voiceover_text.strip():
+            raise ValueError("Voiceover text file is empty.")
+        self._safe_print("[bold green]✓ Text loaded and validated[/bold green]")
         log_event(f"Voiceover text loaded ({len(voiceover_text)} chars)")
 
         # -------------------------------------------------------------
-        # [5] Probe audio duration
+        # [5/12] Probe voiceover audio duration with FFprobe
         # -------------------------------------------------------------
-        self._notify("[5/13]", "Probing audio duration...", status_callback)
+        self._notify("[5/12]", "Probing voiceover audio duration with FFprobe...", status_callback)
         audio_duration = get_audio_duration(Path(voiceover_audio_file))
         formatted_dur = format_timestamp(audio_duration)
-        self.console.print(f"[bold green]✓ Duration: {formatted_dur} ({audio_duration:.3f}s)[/bold green]")
+        self._safe_print(f"[bold green]✓ Duration: {formatted_dur} ({audio_duration:.3f}s)[/bold green]")
         log_event(f"Audio duration probed: {audio_duration:.3f}s ({formatted_dur})")
 
         # -------------------------------------------------------------
-        # [6] Receive & preserve exact timestamp text
+        # [6/12] Receive & preserve exact user timestamp text
         # -------------------------------------------------------------
-        self._notify("[6/13]", "Receiving timestamp instructions...", status_callback)
+        self._notify("[6/12]", "Receiving timestamp instructions...", status_callback)
         raw_text = ""
-        if timestamp_text and timestamp_text.strip():
-            raw_text = timestamp_text.strip()
+        if timestamp_text is not None and len(timestamp_text) > 0:
+            # Must NEVER call .strip() - preserve user text untouched
+            raw_text = timestamp_text
         elif timestamp_file and Path(timestamp_file).exists():
-            raw_text = Path(timestamp_file).read_text(encoding="utf-8").strip()
+            raw_text = Path(timestamp_file).read_text(encoding="utf-8")
         else:
             raise ValueError("No timestamp text provided. Please provide timestamp text or file.")
 
-        # Crucial Requirement: Preserve exact raw user input
+        # Crucial Requirement: Preserve exact raw user input untouched
         source_text_path = out_dir / "source_timestamp_text.txt"
         source_text_path.write_text(raw_text, encoding="utf-8")
-        self.console.print(f"[bold green]✓ Saved exact user timestamp text ({len(raw_text.splitlines())} lines)[/bold green]")
+        self._safe_print(f"[bold green]✓ Saved exact user timestamp text ({len(raw_text.splitlines())} lines)[/bold green]")
         log_event(f"Source timestamp text saved to {source_text_path.name}")
 
         # -------------------------------------------------------------
-        # [7] Send timestamp text to AICredits
+        # [7/12] Dispatch timestamp text to LLM
         # -------------------------------------------------------------
-        self._notify("[7/13]", "Sending timestamp text to AICredits...", status_callback)
+        self._notify("[7/12]", "Dispatching timestamp text to LLM...", status_callback)
         log_event("Sending timestamp text for normalization...")
 
         # -------------------------------------------------------------
-        # [8] Normalize LLM response
+        # [8/12] Normalize LLM response into structured timeline
         # -------------------------------------------------------------
-        self._notify("[8/13]", "Normalizing timeline...", status_callback)
+        self._notify("[8/12]", "Normalizing timeline entries...", status_callback)
         normalized_entries = self.normalizer.normalize(
             timestamp_text=raw_text,
             expected_count=len(locked_sequence),
@@ -179,35 +196,48 @@ class VideoAutomationPipeline:
         # Save llm_timeline.json
         llm_timeline_path = out_dir / "llm_timeline.json"
         llm_timeline_path.write_text(llm_timeline.model_dump_json(indent=2), encoding="utf-8")
-        self.console.print(f"[bold green]✓ Normalized {len(normalized_entries)} timeline entries[/bold green]")
+        self._safe_print(f"[bold green]✓ Normalized {len(normalized_entries)} timeline entries[/bold green]")
         log_event(f"Saved llm_timeline.json with {len(normalized_entries)} entries")
 
         # -------------------------------------------------------------
-        # [9] Validate normalized timeline against manifest & rules
+        # [9/12] Validate normalized timeline against manifest & rules
         # -------------------------------------------------------------
-        self._notify("[9/13]", "Validating normalized timeline...", status_callback)
+        self._notify("[9/12]", "Validating normalized timeline against manifest & rules...", status_callback)
         entry_indices = [e.image_index for e in normalized_entries]
         expected_indices = list(range(1, len(locked_sequence) + 1))
 
-        missing_in_timeline = sorted(list(set(expected_indices) - set(entry_indices)))
-        duplicate_in_timeline = sorted(list(set([x for x in entry_indices if entry_indices.count(x) > 1])))
+        # Check out-of-range / extra indices
+        out_of_range = sorted(list(set([x for x in entry_indices if x < 1 or x > len(locked_sequence)])))
+        if out_of_range:
+            msg = f"❌ TIMELINE VALIDATION FAILED\nOut-of-range image indexes in timeline: {out_of_range} (valid range is 1 to {len(locked_sequence)})"
+            self._safe_print(f"[bold red]{msg}[/bold red]")
+            raise ValueError(msg)
 
+        missing_in_timeline = sorted(list(set(expected_indices) - set(entry_indices)))
         if missing_in_timeline:
             msg = f"❌ TIMELINE VALIDATION FAILED\nMissing image indexes: {', '.join(map(str, missing_in_timeline))}"
-            self.console.print(f"[bold red]{msg}[/bold red]")
+            self._safe_print(f"[bold red]{msg}[/bold red]")
             raise ValueError(msg)
 
+        duplicate_in_timeline = sorted(list(set([x for x in entry_indices if entry_indices.count(x) > 1])))
         if duplicate_in_timeline:
             msg = f"❌ TIMELINE VALIDATION FAILED\nDuplicate image indexes in timeline: {', '.join(map(str, duplicate_in_timeline))}"
-            self.console.print(f"[bold red]{msg}[/bold red]")
+            self._safe_print(f"[bold red]{msg}[/bold red]")
             raise ValueError(msg)
 
-        self.console.print("[bold green]✓ All image indexes matched[/bold green]")
+        # Check zero or negative durations
+        invalid_durations = [e for e in normalized_entries if (e.end - e.start) <= 0]
+        if invalid_durations:
+            msg = f"❌ TIMELINE VALIDATION FAILED\nZero or negative durations detected: {[f'Image {e.image_index} ({e.start}->{e.end})' for e in invalid_durations]}"
+            self._safe_print(f"[bold red]{msg}[/bold red]")
+            raise ValueError(msg)
+
+        self._safe_print("[bold green]✓ All image indexes matched[/bold green]")
 
         # -------------------------------------------------------------
-        # [10] Reconcile timeline (zero gaps, zero overlaps, exact duration)
+        # [10/12] Reconcile timeline boundaries & safe micro-snapping
         # -------------------------------------------------------------
-        self._notify("[10/13]", "Reconciling timeline boundaries...", status_callback)
+        self._notify("[10/12]", "Reconciling timeline boundaries & safe micro-snapping...", status_callback)
         reconciled_timeline = TimelineReconciler.reconcile(
             raw_entries=normalized_entries,
             locked_images=locked_sequence,
@@ -232,13 +262,6 @@ class VideoAutomationPipeline:
         timing_report_path.write_text(json.dumps(timing_report, indent=2), encoding="utf-8")
         (out_dir / "planning_report.json").write_text(json.dumps(timing_report, indent=2), encoding="utf-8")
 
-        self.console.print("[bold green]✓ Timeline reconciled[/bold green]")
-        log_event(f"Reconciled timeline saved to {final_timeline_path.name}")
-
-        # -------------------------------------------------------------
-        # [11] Final timeline validation
-        # -------------------------------------------------------------
-        self._notify("[11/13]", "Performing final timeline validation...", status_callback)
         tl_validation = TimelineValidator.validate_timeline(
             timeline=reconciled_timeline,
             expected_image_count=len(locked_sequence),
@@ -246,18 +269,18 @@ class VideoAutomationPipeline:
         )
         if not tl_validation.is_valid:
             err_str = "\n".join(tl_validation.errors)
-            self.console.print(f"[bold red]❌ TIMELINE ERROR:\n{err_str}[/bold red]")
+            self._safe_print(f"[bold red]❌ TIMELINE ERROR:\n{err_str}[/bold red]")
             raise ValueError(f"Final timeline validation failed:\n{err_str}")
 
-        self.console.print(f"[bold green]✓ {len(locked_sequence)}/{len(locked_sequence)} images strictly verified[/bold green]")
-        self.console.print("[bold green]✓ Continuous timing, no gaps, no overlaps[/bold green]")
-        self.console.print(f"[bold green]✓ Full audio coverage (0.000 → {audio_duration:.3f}s)[/bold green]")
+        self._safe_print(f"[bold green]✓ {len(locked_sequence)}/{len(locked_sequence)} images strictly verified[/bold green]")
+        self._safe_print("[bold green]✓ Continuous timing, no gaps, no overlaps[/bold green]")
+        self._safe_print(f"[bold green]✓ Full audio coverage (0.000 → {audio_duration:.3f}s)[/bold green]")
         log_event("Final timeline validation passed.")
 
         # -------------------------------------------------------------
-        # [12] Render with FFmpeg
+        # [11/12] Render with FFmpeg
         # -------------------------------------------------------------
-        self._notify("[12/13]", "Rendering video with FFmpeg...", status_callback)
+        self._notify("[11/12]", "Rendering video with FFmpeg...", status_callback)
         final_video_path = out_dir / "final_video.mp4"
         self.renderer.render(
             timeline=reconciled_timeline,
@@ -276,25 +299,32 @@ class VideoAutomationPipeline:
                 is_preview=True
             )
 
-        self.console.print("[bold green]✓ FFmpeg render complete[/bold green]")
+        self._safe_print("[bold green]✓ FFmpeg render complete[/bold green]")
         log_event(f"Video rendered to {final_video_path.name}")
 
         # -------------------------------------------------------------
-        # [13] Verify final MP4 with FFprobe
+        # [12/12] Post-render FFprobe verification
         # -------------------------------------------------------------
-        self._notify("[13/13]", "Verifying final MP4 with FFprobe...", status_callback)
-        verification = verify_rendered_video(final_video_path, expected_audio_duration=audio_duration)
+        self._notify("[12/12]", "Verifying final MP4 with FFprobe...", status_callback)
+        verification = verify_rendered_video(
+            final_video_path,
+            expected_audio_duration=audio_duration,
+            tolerance=0.25,
+            expected_width=self.config.video_width,
+            expected_height=self.config.video_height,
+            expected_fps=self.config.video_fps,
+            expected_video_codec="libx264",
+            expected_audio_codec="aac"
+        )
         if not verification.video_valid:
             err_msg = "\n".join(verification.errors)
-            self.console.print(f"[bold red]❌ VIDEO VERIFICATION FAILED:\n{err_msg}[/bold red]")
+            self._safe_print(f"[bold red]❌ VIDEO VERIFICATION FAILED:\n{err_msg}[/bold red]")
             raise ValueError(f"Post-render video verification failed:\n{err_msg}")
 
-        self.console.print(
+        self._safe_print(
             f"[bold green]✓ Verification Passed: {verification.width}x{verification.height} "
             f"@{verification.fps}fps | Video: {verification.video_duration:.3f}s vs Audio: {verification.audio_duration:.3f}s[/bold green]"
         )
-        log_event(f"Video verification passed: {verification.model_dump_json()}")
-
         # Write render log
         (out_dir / "render_log.txt").write_text("\n".join(render_log_lines), encoding="utf-8")
 

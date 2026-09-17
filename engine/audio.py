@@ -110,7 +110,12 @@ def get_audio_duration(audio_path: Path) -> float:
 def verify_rendered_video(
     video_path: Path,
     expected_audio_duration: float,
-    tolerance: float = 0.5
+    tolerance: float = 0.25,
+    expected_width: int = None,
+    expected_height: int = None,
+    expected_fps: float = None,
+    expected_video_codec: str = None,
+    expected_audio_codec: str = None,
 ) -> "VerificationReport":
     """Verify final rendered video file using ffprobe.
     
@@ -118,7 +123,7 @@ def verify_rendered_video(
     - File exists and is non-empty
     - Video stream presence, codec, resolution, and fps
     - Audio stream presence and codec
-    - Video duration matches audio duration within tolerance
+    - Video duration matches audio duration within tolerance (~0.25s)
     """
     from engine.models import VerificationReport
 
@@ -207,6 +212,32 @@ def verify_rendered_video(
             f"Video duration ({video_dur:.3f}s) differs from audio duration "
             f"({expected_audio_duration:.3f}s) by {diff:.3f}s (tolerance: {tolerance:.3f}s)."
         )
+
+    if expected_width is not None and width != expected_width:
+        errors.append(f"Rendered video width ({width}) does not match expected ({expected_width}).")
+
+    if expected_height is not None and height != expected_height:
+        errors.append(f"Rendered video height ({height}) does not match expected ({expected_height}).")
+
+    if expected_fps is not None and abs(fps - expected_fps) > 1.0:
+        errors.append(f"Rendered video FPS ({fps:.2f}) does not match expected ({expected_fps:.2f}).")
+
+    if expected_video_codec is not None:
+        v_act = video_codec.lower()
+        v_exp = expected_video_codec.lower()
+        h264_family = {"libx264", "h264", "avc", "avc1"}
+        h265_family = {"libx265", "h265", "hevc"}
+        matches = (v_act == v_exp) or (v_act in h264_family and v_exp in h264_family) or (v_act in h265_family and v_exp in h265_family)
+        if not matches:
+            errors.append(f"Rendered video codec ('{video_codec}') does not match expected ('{expected_video_codec}').")
+
+    if expected_audio_codec is not None:
+        a_act = audio_codec.lower()
+        a_exp = expected_audio_codec.lower()
+        aac_family = {"aac", "libfdk_aac", "mp4a"}
+        matches = (a_act == a_exp) or (a_act in aac_family and a_exp in aac_family)
+        if not matches:
+            errors.append(f"Rendered audio codec ('{audio_codec}') does not match expected ('{expected_audio_codec}').")
 
     is_valid = len(errors) == 0
 
