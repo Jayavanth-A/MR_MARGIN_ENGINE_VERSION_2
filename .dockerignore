@@ -1,0 +1,17 @@
+.env
+*.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+output/
+cache/
+logs/
+temp/
+tmp/
+*.mp4
+*.wav
+*.mp3
+.git
+.gitignore

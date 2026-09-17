@@ -1,0 +1,12 @@
+services:
+  mr_margin_engine:
+    build: .
+    container_name: mr_margin_engine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./output:/app/output
+      - ./cache:/app/cache
+    env_file:
+      - .env
+    restart: unless-stopped

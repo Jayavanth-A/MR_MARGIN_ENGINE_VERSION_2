@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MR_MARGIN_ENGINE — Timestamp Normalization Video Pipeline</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-card: #161b22;
+            --bg-input: #0e131a;
+            --border-color: #30363d;
+            --border-focus: #58a6ff;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --accent-cyan: #38bdf8;
+            --accent-blue: #2563eb;
+            --accent-green: #238636;
+            --accent-red: #da3633;
+            --accent-amber: #d29922;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #ffffff;
+        }
+
+        .badge {
+            font-size: 11px;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ffffff;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'Fira Code', monospace;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--border-focus);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        /* TEXTAREA WITH CORNER SEND ARROW */
+        .textarea-container {
+            position: relative;
+            width: 100%;
+            flex-grow: 1;
+            min-height: 280px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        textarea {
+            width: 100%;
+            flex-grow: 1;
+            min-height: 280px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 14px 48px 48px 14px; /* padding right & bottom for send button */
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'Fira Code', monospace;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 1px var(--border-focus);
+        }
+
+        /* SEND ARROW BUTTON AT BOTTOM-RIGHT CORNER */
+        .send-arrow-btn {
+            position: absolute;
+            bottom: 14px;
+            right: 14px;
+            width: 38px;
+            height: 38px;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+            transition: transform 0.15s, background-color 0.2s, box-shadow 0.2s;
+        }
+
+        .send-arrow-btn:hover {
+            background: #1d4ed8;
+            transform: scale(1.08);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+        }
+
+        .send-arrow-btn:active {
+            transform: scale(0.95);
+        }
+
+        .send-arrow-btn:disabled {
+            background: #30363d;
+            color: #6e7681;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .sample-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            background: #21262d;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .btn-small:hover {
+            background: #30363d;
+            color: var(--text-primary);
+        }
+
+        /* PROGRESS LOG */
+        .progress-list {
+            list-style: none;
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 340px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-secondary);
+        }
+
+        .progress-item.active {
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent-cyan);
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .progress-item.done {
+            color: #3fb950;
+        }
+
+        .progress-item.error {
+            background: rgba(218, 54, 51, 0.15);
+            color: #f85149;
+            border-left: 3px solid var(--accent-red);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #484f58;
+            flex-shrink: 0;
+        }
+
+        .progress-item.active .status-dot {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 8px var(--accent-cyan);
+            animation: pulse 1s infinite alternate;
+        }
+
+        .progress-item.done .status-dot {
+            background: #3fb950;
+        }
+
+        .progress-item.error .status-dot {
+            background: #f85149;
+        }
+
+        @keyframes pulse {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+
+        /* ERROR ALERT BANNER */
+        .alert-box {
+            display: none;
+            background: rgba(218, 54, 51, 0.1);
+            border: 1px solid rgba(218, 54, 51, 0.4);
+            border-radius: 6px;
+            padding: 14px;
+            margin-top: 14px;
+            color: #f85149;
+            font-size: 13px;
+            white-space: pre-wrap;
+            font-family: 'Fira Code', monospace;
+        }
+
+        /* VIDEO PREVIEW */
+        .video-box {
+            display: none;
+            margin-top: 16px;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            background: #000000;
+        }
+
+        .action-links {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+
+        .action-links a {
+            font-size: 12px;
+            color: var(--accent-cyan);
+            text-decoration: none;
+            background: #21262d;
+            border: 1px solid var(--border-color);
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .action-links a:hover {
+            text-decoration: underline;
+            background: #30363d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                MR_MARGIN_ENGINE
+                <span class="badge">Timestamp Normalization</span>
+            </h1>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+                Sequential Image-to-Voiceover Video Automation
+            </div>
+        </header>
+
+        <div class="grid">
+            <!-- LEFT COLUMN: INPUTS & TIMESTAMP TEXT FIELD WITH SEND ARROW -->
+            <div class="card">
+                <div class="card-header">
+                    <span>1. Project Input Configuration</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Images Directory</label>
+                    <input type="text" id="imagesDir" value="sample_data/images">
+                </div>
+
+                <div class="form-group">
+                    <label>Prompts File (JSON)</label>
+                    <input type="text" id="promptsFile" value="sample_data/prompts.json">
+                </div>
+
+                <div class="form-group">
+                    <label>Voiceover Text File</label>
+                    <input type="text" id="voiceoverFile" value="sample_data/voiceover.txt">
+                </div>
+
+                <div class="form-group">
+                    <label>Voiceover Audio File</label>
+                    <input type="text" id="audioFile" value="sample_data/audio.wav">
+                </div>
+
+                <label class="checkbox-group">
+                    <input type="checkbox" id="mockLlmToggle" checked>
+                    <span>Use Mock LLM (Offline Test / Free Mode)</span>
+                </label>
+
+                <div style="margin-top: 16px; margin-bottom: 6px;" class="card-header">
+                    <span>2. Paste Timestamp Instructions</span>
+                </div>
+
+                <!-- LARGE MULTILINE TEXTAREA WITH SEND ARROW AT BOTTOM-RIGHT -->
+                <div class="textarea-container">
+                    <textarea id="timestampText" placeholder="Paste your timestamp instructions here...
+
+Example formats:
+Image 1: 00:00 - 00:02.5
+Image 2: 00:02.5 - 00:05.0
+Image 3: 00:05.0 - 00:07.5
+Image 4: 00:07.5 - 00:09.5
+Image 5: 00:09.5 - 00:12.0
+
+Or natural language:
+Image 1 should appear from 0 to 2.5 seconds.
+Image 2 should appear from 2.5 to 5.0 seconds.
+..."></textarea>
+                    
+                    <!-- DEDICATED BOTTOM-RIGHT SEND ARROW BUTTON -->
+                    <button class="send-arrow-btn" id="sendBtn" title="Send Timestamp Instructions (➤)">
+                        ➤
+                    </button>
+                </div>
+
+                <div class="sample-buttons">
+                    <span style="font-size: 11px; color: var(--text-secondary); align-self: center;">Samples:</span>
+                    <button class="btn-small" onclick="loadSample('standard')">Standard (MM:SS)</button>
+                    <button class="btn-small" onclick="loadSample('natural')">Natural Language</button>
+                    <button class="btn-small" onclick="loadSample('arrows')">Arrow Format (→)</button>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: LIVE PROGRESS TRACKER, ERROR ALERT, VIDEO PLAYER -->
+            <div class="card">
+                <div class="card-header">
+                    <span>3. Pipeline Progression</span>
+                    <span id="pipelineStatusBadge" class="badge" style="background: rgba(139, 148, 158, 0.15); color: var(--text-secondary); border-color: var(--border-color);">IDLE</span>
+                </div>
+
+                <ul class="progress-list" id="progressList">
+                    <li class="progress-item" id="stage-idle">
+                        <span class="status-dot"></span>
+                        <span>Waiting for user timestamp input...</span>
+                    </li>
+                </ul>
+
+                <div class="alert-box" id="errorBox"></div>
+
+                <div class="video-box" id="videoBox">
+                    <video id="videoPlayer" controls autoplay muted>
+                        Your browser does not support video playback.
+                    </video>
+                </div>
+
+                <div class="action-links" id="actionLinks" style="display: none;">
+                    <a href="/api/file/source_timestamp_text.txt" target="_blank">📄 source_timestamp_text.txt</a>
+                    <a href="/api/file/llm_timeline.json" target="_blank">📄 llm_timeline.json</a>
+                    <a href="/api/file/final_timeline.json" target="_blank">📄 final_timeline.json</a>
+                    <a href="/api/file/timing_report.json" target="_blank">📊 timing_report.json</a>
+                    <a href="/api/file/validation_report.json" target="_blank">🔍 validation_report.json</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const samples = {
+            standard: "Image 1: 00:00 - 00:02.59\nImage 2: 00:02.59 - 00:05.04\nImage 3: 00:05.04 - 00:07.56\nImage 4: 00:07.56 - 00:09.34\nImage 5: 00:09.34 - 00:12.00",
+            natural: "Image 1 should appear from 0 to 2.5 seconds.\nImage 2 should appear from 2.5 to 5.0 seconds.\nImage 3 should appear from 5.0 to 7.5 seconds.\nImage 4 should appear from 7.5 to 9.3 seconds.\nImage 5 should appear from 9.3 to 12.0 seconds.",
+            arrows: "1 → 00:00 to 00:02.5\n2 → 00:02.5 to 00:05.0\n3 → 00:05.0 to 00:07.5\n4 → 00:07.5 to 00:09.3\n5 → 00:09.3 to 00:12.0"
+        };
+
+        function loadSample(type) {
+            document.getElementById('timestampText').value = samples[type] || "";
+        }
+
+        // Preload standard sample
+        loadSample('standard');
+
+        const sendBtn = document.getElementById('sendBtn');
+        const progressList = document.getElementById('progressList');
+        const errorBox = document.getElementById('errorBox');
+        const videoBox = document.getElementById('videoBox');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const actionLinks = document.getElementById('actionLinks');
+        const statusBadge = document.getElementById('pipelineStatusBadge');
+
+        const STAGES = [
+            "Reading timestamp instructions...",
+            "Sending timestamp text to AI...",
+            "AI response received...",
+            "Normalizing timeline...",
+            "Validating timeline...",
+            "Matching images...",
+            "Matching prompts...",
+            "Checking audio duration...",
+            "Reconciling timeline...",
+            "Rendering video...",
+            "Complete"
+        ];
+
+        function renderInitialStages() {
+            progressList.innerHTML = "";
+            STAGES.forEach((stage, idx) => {
+                const li = document.createElement('li');
+                li.className = "progress-item";
+                li.id = `stage-${idx}`;
+                li.innerHTML = `<span class="status-dot"></span><span>${stage}</span>`;
+                progressList.appendChild(li);
+            });
+        }
+
+        function setStageActive(index) {
+            for (let i = 0; i < STAGES.length; i++) {
+                const el = document.getElementById(`stage-${i}`);
+                if (!el) continue;
+                if (i < index) {
+                    el.className = "progress-item done";
+                    el.querySelector('span:last-child').innerHTML = `✓ ${STAGES[i]}`;
+                } else if (i === index) {
+                    el.className = "progress-item active";
+                } else {
+                    el.className = "progress-item";
+                }
+            }
+        }
+
+        function markStageError(index, errorMsg) {
+            const el = document.getElementById(`stage-${index}`);
+            if (el) {
+                el.className = "progress-item error";
+                el.querySelector('span:last-child').innerHTML = `❌ ${STAGES[index]}`;
+            }
+            errorBox.style.display = 'block';
+            errorBox.textContent = errorMsg;
+            statusBadge.textContent = "ERROR";
+            statusBadge.style.color = "#f85149";
+            statusBadge.style.borderColor = "rgba(218, 54, 51, 0.4)";
+        }
+
+        sendBtn.addEventListener('click', async () => {
+            const timestampText = document.getElementById('timestampText').value.trim();
+            if (!timestampText) {
+                alert("Please paste your timestamp instructions into the text area first!");
+                return;
+            }
+
+            errorBox.style.display = 'none';
+            videoBox.style.display = 'none';
+            actionLinks.style.display = 'none';
+            sendBtn.disabled = true;
+
+            statusBadge.textContent = "PROCESSING";
+            statusBadge.style.color = "var(--accent-cyan)";
+            statusBadge.style.borderColor = "rgba(56, 189, 248, 0.4)";
+
+            renderInitialStages();
+            setStageActive(0);
+
+            const payload = {
+                images_dir: document.getElementById('imagesDir').value,
+                prompts_file: document.getElementById('promptsFile').value,
+                voiceover_file: document.getElementById('voiceoverFile').value,
+                audio_file: document.getElementById('audioFile').value,
+                timestamp_text: timestampText,
+                mock_llm: document.getElementById('mockLlmToggle').checked
+            };
+
+            try {
+                // Animate progress smoothly through steps
+                let currentStep = 0;
+                const progressTimer = setInterval(() => {
+                    if (currentStep < 9) {
+                        currentStep++;
+                        setStageActive(currentStep);
+                    }
+                }, 400);
+
+                const resp = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                clearInterval(progressTimer);
+                const data = await resp.json();
+
+                if (!resp.ok || !data.success) {
+                    markStageError(currentStep, data.error || "Failed to execute video automation pipeline.");
+                    sendBtn.disabled = false;
+                    return;
+                }
+
+                // Success
+                setStageActive(STAGES.length - 1);
+                const completeEl = document.getElementById(`stage-${STAGES.length - 1}`);
+                completeEl.className = "progress-item done";
+                completeEl.querySelector('span:last-child').innerHTML = "✓ Complete";
+
+                statusBadge.textContent = "COMPLETE";
+                statusBadge.style.color = "#3fb950";
+                statusBadge.style.borderColor = "rgba(35, 134, 54, 0.4)";
+
+                // Show video & links
+                videoPlayer.src = "/api/video?t=" + Date.now();
+                videoBox.style.display = 'block';
+                actionLinks.style.display = 'flex';
+
+            } catch (err) {
+                markStageError(1, `Network or server error: ${err.message}`);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+# Environment & Secrets
+.env
+*.env
+.env.*
+!.env.example
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python Bytecode & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Frontend Build Artifacts
+node_modules/
+.next/
+dist/
+build/
+
+# Application Working & Output Directories
+jobs/
+output/
+logs/
+temp/
+tmp/
+cache/
+
+# Media Files & Large Assets
+*.mp4
+*.m4a
+*.wav
+*.mp3
+*.avi
+*.mov
+*.mkv
+
+# IDE & OS Artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
