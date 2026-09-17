@@ -68,7 +68,7 @@ def test_api_run_missing_image_error():
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is False
-    assert "TIMELINE" in data["error"]
+    assert "TIMELINE" in data["error"] or "Chunk" in data["error"]
     assert "Missing image indexes" in data["error"] or "5" in data["error"]
 
 

@@ -158,6 +158,17 @@ class MockLLMClient(BaseLLMClient):
         namespace: str,
         cache_key_data: Optional[Any] = None
     ) -> Any:
+        cache_payload = {
+            "system": system_prompt,
+            "user": user_prompt,
+            "extra": cache_key_data
+        }
+        if self.cache_manager:
+            cached = self.cache_manager.get(namespace, cache_payload)
+            if cached is not None:
+                logger.info(f"Loaded cached mock LLM response for namespace: {namespace}")
+                return cached
+
         # If cache key provides chunk metadata, construct an intelligent dynamic timeline
         if namespace == "story_analysis":
             # Pass 1 mock: extract number of images and duration from prompt or cache_key
@@ -171,7 +182,7 @@ class MockLLMClient(BaseLLMClient):
             t1 = duration * 0.33
             t2 = duration * 0.67
 
-            return {
+            res = {
                 "narrative_summary": "Story progression covering introduction, core development, and conclusion.",
                 "sections": [
                     {
@@ -200,6 +211,9 @@ class MockLLMClient(BaseLLMClient):
                     }
                 ]
             }
+            if self.cache_manager:
+                self.cache_manager.set(namespace, cache_payload, res)
+            return res
 
         elif namespace == "timeline_chunks":
             extra = cache_key_data or {}
@@ -210,13 +224,15 @@ class MockLLMClient(BaseLLMClient):
             n = len(images)
 
             if n == 0:
-                return {"timeline": []}
+                res = {"timeline": []}
+                if self.cache_manager:
+                    self.cache_manager.set(namespace, cache_payload, res)
+                return res
 
             # Generate dynamic (non-uniform) weights based on prompt length or variation
             weights = []
             for i, img in enumerate(images):
                 p_len = len(img.get("prompt", ""))
-                # Dynamic weight based on prompt complexity and subtle harmonic wave
                 w = 1.0 + (p_len % 7) * 0.15 + (i % 3) * 0.2
                 weights.append(w)
             
@@ -241,41 +257,55 @@ class MockLLMClient(BaseLLMClient):
                 })
                 current_t = next_t
 
-            return {"timeline": entries}
+            res = {"timeline": entries}
+            if self.cache_manager:
+                self.cache_manager.set(namespace, cache_payload, res)
+            return res
 
         elif namespace == "timestamp_normalization":
-            # Extract timestamp text from cache_key_data or user_prompt
             extra = cache_key_data or {}
-            text = extra.get("source_timestamp_text") or extra.get("text") or ""
+            text = extra.get("chunk_text") or extra.get("source_timestamp_text") or extra.get("text") or ""
             if not text:
                 text = user_prompt
 
-            # Parse lines and extract index, start, end, and source_reference
+            start_img = extra.get("start_image_index")
+            if start_img is None:
+                m_img = re.search(r"\(Images (\d+) to (\d+)\)", user_prompt)
+                start_img = int(m_img.group(1)) if m_img else 1
+
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             entries = []
-            
+            cur_idx = start_img
+
             from engine.timestamp_normalizer import parse_time_str_to_seconds
 
             for line in lines:
+                # Skip prompt structural wrappers
+                if line.startswith("---") or line.startswith("USER TIMESTAMP") or line.startswith("Convert every") or line.startswith("Expected image"):
+                    continue
                 match = re.search(
-                    r"(?:image\s+)?#?(\d+)[\s:→\-]+(?:(?:should\s+appear\s+)?from\s+)?([0-9:.]+)\s*(?:to|-|–|—)\s*([0-9:.]+)",
+                    r"(?:image\s+|img\s+|#)?(\d+)?[\s:→\-]*?(?:(?:should\s+appear\s+)?from\s+)?([0-9:.]+)\s*(?:to|-|–|—)\s*([0-9:.]+)",
                     line,
                     re.IGNORECASE
                 )
                 if match:
-                    idx = int(match.group(1))
+                    idx_str = match.group(1)
+                    idx = int(idx_str) if idx_str is not None else cur_idx
                     try:
                         st = parse_time_str_to_seconds(match.group(2))
                         en = parse_time_str_to_seconds(match.group(3))
                         entries.append({
                             "image_index": idx,
-                            "start": st,
-                            "end": en,
-                            "source_reference": line
+                            "start": round(st, 4),
+                            "end": round(en, 4)
                         })
+                        cur_idx = idx + 1
                     except Exception:
                         continue
 
-            return {"timeline": entries}
+            res = {"timeline": entries}
+            if self.cache_manager:
+                self.cache_manager.set(namespace, cache_payload, res)
+            return res
 
         return {"status": "ok"}

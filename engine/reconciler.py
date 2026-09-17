@@ -34,20 +34,38 @@ class TimelineReconciler:
         if total_images == 0:
             return Timeline(audio_duration=target_audio_duration, image_count=0, timeline=[])
 
-        # Map raw entries by image index
-        entry_by_index: Dict[int, TimelineEntry] = {}
-        for e in raw_entries:
-            if e.image_index not in entry_by_index:
-                entry_by_index[e.image_index] = e
+        raw_indices = [e.image_index for e in raw_entries]
+        expected_indices = [img.index for img in locked_images]
 
-        # Ensure all images are present in raw entries
-        missing_indices = [img.index for img in locked_images if img.index not in entry_by_index]
+        # Check duplicate image indices
+        duplicate_indices = sorted(list(set([x for x in raw_indices if raw_indices.count(x) > 1])))
+        if duplicate_indices:
+            raise TimelineReconciliationError(
+                f"Duplicate image indexes in timeline: {', '.join(map(str, duplicate_indices))}."
+            )
+
+        # Check extra image indices not in manifest
+        extra_indices = sorted(list(set(raw_indices) - set(expected_indices)))
+        if extra_indices:
+            raise TimelineReconciliationError(
+                f"Extra image indexes in timeline not in image manifest: {', '.join(map(str, extra_indices))}."
+            )
+
+        # Check missing images
+        missing_indices = sorted(list(set(expected_indices) - set(raw_indices)))
         if missing_indices:
             raise TimelineReconciliationError(
                 f"Missing image indexes in timeline: {', '.join(map(str, missing_indices))}. "
                 f"Every image from 1 to {total_images} must be explicitly present."
             )
 
+        if len(raw_entries) != total_images:
+            raise TimelineReconciliationError(
+                f"Timeline count mismatch: received {len(raw_entries)} entries, expected {total_images}."
+            )
+
+        # Map raw entries by image index
+        entry_by_index: Dict[int, TimelineEntry] = {e.image_index: e for e in raw_entries}
         sorted_entries = [entry_by_index[img.index] for img in locked_images]
 
         # In strict mode, verify that discrepancies are within safe micro-reconciliation tolerance

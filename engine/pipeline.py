@@ -195,7 +195,8 @@ class VideoAutomationPipeline:
         normalized_entries = self.normalizer.normalize(
             timestamp_text=raw_text,
             expected_count=len(locked_sequence),
-            audio_duration=audio_duration
+            audio_duration=audio_duration,
+            status_callback=status_callback
         )
 
         # Match filenames from locked sequence

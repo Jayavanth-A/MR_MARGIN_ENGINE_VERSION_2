@@ -42,8 +42,9 @@ class AppConfig(BaseSettings):
 
     # AI Video Editorial Chunking & Quality Heuristics
     max_chunk_images: int = Field(
-        default=40,
-        description="Maximum number of images per LLM planning chunk to avoid token limits"
+        default=100,
+        alias="MAX_CHUNK_IMAGES",
+        description="Maximum number of images per LLM timestamp normalization chunk to avoid token limits"
     )
     min_image_duration: float = Field(
         default=0.8,
