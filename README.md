@@ -143,6 +143,10 @@ python -m pytest tests/ -v
 
 Test coverage includes:
 - Timestamp normalizer (natural language, MM:SS, HH:MM:SS, decimal seconds).
+
+## Want to run locally
+
+python main.py --serve --port 8000   (MAKE SURE NO OTHER RUNNING ON THIS PORT)
 - User input preservation (`source_timestamp_text.txt`).
 - Input and sequence validation (missing images, missing prompts, sequence gaps, duplicates).
 - Timeline reconciliation (boundary snapping, zero gaps/overlaps, exact audio duration).
