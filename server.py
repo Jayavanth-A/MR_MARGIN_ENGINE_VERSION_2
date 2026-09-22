@@ -471,6 +471,22 @@ def get_output_file(filename: str, output_dir: str = "output"):
     )
 
 
+@app.get("/api/capcut-project/zip")
+def download_capcut_project_zip(output_dir: str = "output"):
+    import shutil
+    proj_dir = Path(output_dir) / "capcut_project"
+    if not proj_dir.exists():
+        raise HTTPException(status_code=404, detail="CapCut project directory not found")
+
+    zip_base = Path(output_dir) / "capcut_project_archive"
+    zip_path = Path(shutil.make_archive(str(zip_base), "zip", root_dir=str(proj_dir)))
+    return FileResponse(
+        path=str(zip_path.resolve()),
+        media_type="application/zip",
+        filename="capcut_project.zip"
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

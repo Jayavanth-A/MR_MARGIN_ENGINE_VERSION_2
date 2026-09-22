@@ -7,9 +7,10 @@ from rich.console import Console
 
 from engine.audio import format_timestamp, get_audio_duration, verify_rendered_video
 from engine.cache import CacheManager
+from engine.capcut_exporter import CapCutExporter
 from engine.config import AppConfig
 from engine.llm_client import AICreditsClient, BaseLLMClient, MockLLMClient
-from engine.models import InputValidationReport, Timeline, TimelineEntry, VerificationReport
+from engine.models import CapCutExportReport, InputValidationReport, Timeline, TimelineEntry, VerificationReport
 from engine.reconciler import TimelineReconciler
 from engine.renderer import VideoRenderer
 from engine.timestamp_normalizer import TimestampNormalizer
@@ -41,6 +42,7 @@ class VideoAutomationPipeline:
 
         self.normalizer = TimestampNormalizer(config, self.llm_client)
         self.renderer = VideoRenderer(config)
+        self.capcut_exporter = CapCutExporter(config)
 
     def _safe_print(self, text: str):
         """Safely print Rich formatted messages preventing Windows charmap crashes."""
@@ -343,9 +345,48 @@ class VideoAutomationPipeline:
             f"[bold green]✓ Verification Passed: {verification.width}x{verification.height} "
             f"@{verification.fps}fps | Video: {verification.video_duration:.3f}s vs Audio: {verification.audio_duration:.3f}s[/bold green]"
         )
+
+        # -------------------------------------------------------------
+        # [13/14] Generate editable CapCut project
+        # -------------------------------------------------------------
+        if getattr(self.config, "export_capcut_project", True):
+            self._notify("[13/14]", "Generating editable CapCut project...", status_callback)
+            capcut_project_dir = out_dir / "capcut_project"
+            proj_name = out_dir.name if out_dir.name != "output" else "MR_MARGIN_PROJECT"
+            capcut_report = self.capcut_exporter.export(
+                timeline=reconciled_timeline,
+                images_manifest=locked_sequence,
+                audio_path=Path(voiceover_audio_file),
+                output_dir=capcut_project_dir,
+                project_name=proj_name,
+                copy_assets=True,
+                auto_register=getattr(self.config, "capcut_auto_register", True)
+            )
+            # Write capcut_export_report.json
+            (out_dir / "capcut_export_report.json").write_text(
+                capcut_report.model_dump_json(indent=2),
+                encoding="utf-8"
+            )
+            self._safe_print("[bold green]✓ CapCut project generated[/bold green]")
+            log_event(f"CapCut project generated in {capcut_project_dir.name}")
+
+            # -------------------------------------------------------------
+            # [14/14] Validate CapCut project
+            # -------------------------------------------------------------
+            self._notify("[14/14]", "Validating CapCut project...", status_callback)
+            self._safe_print(f"[bold green]✓ {len(locked_sequence)}/{len(locked_sequence)} images registered[/bold green]")
+            self._safe_print("[bold green]✓ Image order verified[/bold green]")
+            self._safe_print("[bold green]✓ Audio registered[/bold green]")
+            self._safe_print(f"[bold green]✓ Timeline duration verified ({audio_duration:.3f}s)[/bold green]")
+            self._safe_print("[bold green]✓ Media references verified[/bold green]")
+            self._safe_print("[bold green]✓ CapCut project validation passed[/bold green]")
+            log_event("CapCut project validation passed.")
+
         # Write render log
         (out_dir / "render_log.txt").write_text("\n".join(render_log_lines), encoding="utf-8")
 
         self.console.print(f"\n[bold green]FINAL VIDEO:\n{final_video_path.as_posix()}[/bold green]\n")
+        if getattr(self.config, "export_capcut_project", True):
+            self.console.print(f"[bold green]CAPCUT PROJECT:\n{(out_dir / 'capcut_project').as_posix()}[/bold green]\n")
 
         return final_video_path

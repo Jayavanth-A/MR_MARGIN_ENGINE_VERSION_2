@@ -163,3 +163,18 @@ class VerificationReport(BaseModel):
     video_codec: str
     audio_codec: str
     errors: List[str] = Field(default_factory=list)
+
+
+class CapCutExportReport(BaseModel):
+    """Report detailing CapCut project export and validation."""
+    success: bool
+    project_dir: Path
+    project_name: str
+    image_count: int
+    duration_seconds: float
+    duration_us: int
+    registered_in_capcut: bool = False
+    capcut_draft_path: Optional[Path] = None
+    validation_passed: bool = False
+    errors: List[str] = Field(default_factory=list)
+    details: Dict[str, Any] = Field(default_factory=dict)

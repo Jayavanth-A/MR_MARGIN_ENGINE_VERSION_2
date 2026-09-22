@@ -62,5 +62,22 @@ class AppConfig(BaseSettings):
     llm_timeout_seconds: int = Field(default=120)
     llm_max_retries: int = Field(default=3)
 
+    # CapCut Desktop Export Parameters
+    export_capcut_project: bool = Field(
+        default=True,
+        alias="EXPORT_CAPCUT_PROJECT",
+        description="Whether to generate an editable CapCut Desktop project"
+    )
+    capcut_draft_root: Optional[Path] = Field(
+        default=None,
+        alias="CAPCUT_DRAFT_ROOT",
+        description="Custom path to CapCut draft directory (auto-detected if None)"
+    )
+    capcut_auto_register: bool = Field(
+        default=True,
+        alias="CAPCUT_AUTO_REGISTER",
+        description="Whether to register the project in CapCut's root_meta_info.json"
+    )
+
 
 config = AppConfig()
